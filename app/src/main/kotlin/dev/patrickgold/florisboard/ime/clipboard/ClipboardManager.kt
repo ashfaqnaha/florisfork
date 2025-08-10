@@ -23,10 +23,20 @@ import androidx.lifecycle.MutableLiveData
 import dev.patrickgold.florisboard.app.FlorisPreferenceStore
 import dev.patrickgold.florisboard.appContext
 import dev.patrickgold.florisboard.editorInstance
-import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDao
-import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardHistoryDatabase
 import dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardItem
 import dev.patrickgold.florisboard.ime.clipboard.provider.ItemType
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.engine.cio.Cio
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -38,7 +48,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import org.florisboard.lib.android.AndroidClipboardManager
 import org.florisboard.lib.android.AndroidClipboardManager_OnPrimaryClipChangedListener
 import org.florisboard.lib.android.setOrClearPrimaryClip
@@ -98,8 +108,15 @@ class ClipboardManager(
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var cleanUpJob: Job
-    private var clipHistoryDb: ClipboardHistoryDatabase? = null
-    private val clipHistoryDao: ClipboardHistoryDao? get() = clipHistoryDb?.clipboardItemDao()
+
+    private val httpClient = HttpClient(Cio) {
+        install(ContentNegotiation) {
+            json(Json {
+                ignoreUnknownKeys = true
+            })
+        }
+    }
+    private val remoteApi = "http://10.0.2.2:3000"
 
     private val _history = MutableLiveData(ClipboardHistory.Empty)
     val history: LiveData<ClipboardHistory> get() = _history
@@ -126,21 +143,22 @@ class ClipboardManager(
 
     fun initializeForContext(context: Context) {
         ioScope.launch {
-            if (clipHistoryDb == null) {
-                clipHistoryDb = ClipboardHistoryDatabase.new(context.applicationContext)
-                withContext(Dispatchers.Main) {
-                    clipHistoryDao?.getAllLive()?.observeForever { items ->
-                        updateHistory(items)
-                    }
-                }
-            }
+            fetchHistory()
+        }
+    }
+
+    private suspend fun fetchHistory() {
+        try {
+            val items = httpClient.get("$remoteApi/clipboard/history").body<List<ClipboardItem>>()
+            updateHistory(items)
+        } catch (e: Exception) {
+            // TODO: Handle error
         }
     }
 
     private fun updateHistory(items: List<ClipboardItem>) {
         val itemsSorted = items.sortedByDescending { it.creationTimestampMs }
         val clipHistory = ClipboardHistory(itemsSorted)
-        enforceHistoryLimit(clipHistory)
         _history.postValue(clipHistory)
     }
 
@@ -224,65 +242,21 @@ class ClipboardManager(
      */
     private fun insertOrMoveBeginning(newItem: ClipboardItem) {
         if (prefs.clipboard.historyEnabled.get()) {
-            val historyElement = history().all.firstOrNull { it.type == ItemType.TEXT && it.text == newItem.text }
-            if (historyElement != null) {
-                moveToTheBeginning(
-                    oldItem = historyElement,
-                    newItem = if (historyElement.isPinned) {
-                        newItem.copy(isPinned = true)
-                    } else {
-                        newItem
-                    }
-                )
-            } else {
-                insertClip(newItem)
-            }
-        }
-    }
-
-    private fun enforceHistoryLimit(clipHistory: ClipboardHistory) {
-        if (prefs.clipboard.limitHistorySize.get()) {
-            val nonPinnedItems = clipHistory.recent + clipHistory.other
-            val nToRemove = nonPinnedItems.size - prefs.clipboard.maxHistorySize.get()
-            if (nToRemove > 0) {
-                val itemsToRemove = nonPinnedItems.asReversed().filterIndexed { n, _ -> n < nToRemove }
-                ioScope.launch {
-                    clipHistoryDao?.delete(itemsToRemove)
-                }
-            }
-        }
-    }
-
-    private fun enforceExpiryDate(clipHistory: ClipboardHistory) {
-        val itemsToRemove = mutableSetOf<ClipboardItem>()
-        if (prefs.clipboard.cleanUpOld.get()) {
-            val nonPinnedItems = clipHistory.recent + clipHistory.other
-            val expiryTime = System.currentTimeMillis() - (prefs.clipboard.cleanUpAfter.get() * 60 * 1000)
-            itemsToRemove.addAll(nonPinnedItems.filter { it.creationTimestampMs < expiryTime })
-        }
-        if (prefs.clipboard.autoCleanSensitive.get()) {
-            val sensitiveData = clipHistory.all.filter { it.isSensitive }
-            val expiryTime = System.currentTimeMillis() - (prefs.clipboard.autoCleanSensitiveAfter.get() * 1000)
-            itemsToRemove.addAll(sensitiveData.filter { it.creationTimestampMs < expiryTime })
-        }
-        if (itemsToRemove.isNotEmpty()) {
-            ioScope.launch {
-                clipHistoryDao?.delete(itemsToRemove.toList())
-            }
-        }
-    }
-
-    private fun moveToTheBeginning(oldItem: ClipboardItem, newItem: ClipboardItem) {
-        ioScope.launch {
-            clipHistoryDao?.delete(oldItem)
-            clipHistoryDao?.insert(newItem)
+            insertClip(newItem)
         }
     }
 
     fun insertClip(item: ClipboardItem) {
         ioScope.launch {
-            val id = clipHistoryDao?.insert(item)
-            item.id = id ?: 0
+            try {
+                httpClient.post("$remoteApi/clipboard/history") {
+                    contentType(ContentType.Application.Json)
+                    setBody(item)
+                }
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
+            }
         }
     }
 
@@ -291,10 +265,12 @@ class ClipboardManager(
      */
     fun clearHistory() {
         ioScope.launch {
-            for (item in history().all) {
-                item.close(appContext)
+            try {
+                httpClient.delete("$remoteApi/clipboard/history/unpinned")
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
             }
-            clipHistoryDao?.deleteAllUnpinned()
         }
     }
 
@@ -303,51 +279,51 @@ class ClipboardManager(
      */
     fun clearFullHistory() {
         ioScope.launch {
-            for (item in history().all) {
-                item.close(appContext)
-            }
-            clipHistoryDao?.deleteAll()
-        }
-    }
-
-
-    /**
-     * Restore the clipboard history from a [List]
-     *
-     * @param items the [ClipboardItem] list with the new items
-     */
-    fun restoreHistory(items: List<ClipboardItem>) {
-        ioScope.launch {
-            val currentHistory = this@ClipboardManager.history().all
-            for (item in items) {
-                if (!currentHistory.map { it.copy(id = 0) }.contains(item.copy(id = 0))) {
-                    this@ClipboardManager.insertClip(item.copy(id = 0))
-                }
+            try {
+                httpClient.delete("$remoteApi/clipboard/history")
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
             }
         }
     }
 
     fun deleteClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.delete(item)
-            tryOrNull {
-                val uri = item.uri
-                if (uri != null) {
-                    appContext.contentResolver.delete(uri, null, null)
-                }
+            try {
+                httpClient.delete("$remoteApi/clipboard/history/${item.id}")
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
             }
         }
     }
 
     fun pinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = true))
+            try {
+                httpClient.put("$remoteApi/clipboard/history/${item.id}") {
+                    contentType(ContentType.Application.Json)
+                    setBody(item.copy(isPinned = true))
+                }
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
+            }
         }
     }
 
     fun unpinClip(item: ClipboardItem) {
         ioScope.launch {
-            clipHistoryDao?.update(item.copy(isPinned = false))
+            try {
+                httpClient.put("$remoteApi/clipboard/history/${item.id}") {
+                    contentType(ContentType.Application.Json)
+                    setBody(item.copy(isPinned = false))
+                }
+                fetchHistory()
+            } catch (e: Exception) {
+                // TODO: Handle error
+            }
         }
     }
 

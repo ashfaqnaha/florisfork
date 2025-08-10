@@ -211,6 +211,11 @@ dependencies {
     implementation(libs.patrickgold.jetpref.datastore.ui)
     implementation(libs.patrickgold.jetpref.material.ui)
 
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
     implementation(project(":lib:android"))
     implementation(project(":lib:color"))
     implementation(project(":lib:compose"))
