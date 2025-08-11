@@ -145,7 +145,8 @@ class ClipboardManager(
             val items = httpClient.get("$remoteApi/clipboard/history").body<List<ClipboardItem>>()
             updateHistory(items)
         } catch (e: Exception) {
-            // TODO: Handle error
+            Log.e("ClipboardManager", "Failed to fetch history: ${e.message}", e)
+            appContext.showShortToastSync("Failed to fetch clipboard history.")
         }
     }
 
@@ -249,7 +250,8 @@ class ClipboardManager(
                 }
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to insert clip: ${e.message}", e)
+                appContext.showShortToastSync("Failed to save clip to history.")
             }
         }
     }
@@ -263,7 +265,8 @@ class ClipboardManager(
                 httpClient.delete("$remoteApi/clipboard/history/unpinned")
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to clear history: ${e.message}", e)
+                appContext.showShortToastSync("Failed to clear clipboard history.")
             }
         }
     }
@@ -277,7 +280,8 @@ class ClipboardManager(
                 httpClient.delete("$remoteApi/clipboard/history")
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to clear full history: ${e.message}", e)
+                appContext.showShortToastSync("Failed to clear full clipboard history.")
             }
         }
     }
@@ -288,7 +292,8 @@ class ClipboardManager(
                 httpClient.delete("$remoteApi/clipboard/history/${item.id}")
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to delete clip: ${e.message}", e)
+                appContext.showShortToastSync("Failed to delete clip from history.")
             }
         }
     }
@@ -302,7 +307,8 @@ class ClipboardManager(
                 }
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to unpin clip: ${e.message}", e)
+                appContext.showShortToastSync("Failed to unpin clip.")
             }
         }
     }
@@ -316,7 +322,8 @@ class ClipboardManager(
                 }
                 fetchHistory()
             } catch (e: Exception) {
-                // TODO: Handle error
+                Log.e("ClipboardManager", "Failed to pin clip: ${e.message}", e)
+                appContext.showShortToastSync("Failed to pin clip.")
             }
         }
     }

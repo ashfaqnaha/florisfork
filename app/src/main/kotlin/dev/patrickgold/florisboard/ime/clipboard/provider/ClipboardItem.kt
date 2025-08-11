@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import dev.patrickgold.florisboard.R
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.florisboard.lib.android.AndroidVersion
 import org.florisboard.lib.android.UriSerializer
@@ -30,7 +31,8 @@ enum class ItemType(val value: Int) {
 
 @Serializable
 data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor(
-    val _id: String? = null,
+    @SerialName("_id")
+    val id: String? = null,
     val type: ItemType,
     val text: String?,
     @Serializable(with = UriSerializer::class)
@@ -43,9 +45,6 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
     @EncodeDefault
     val isRemoteDevice: Boolean = false,
 ) {
-    val id: Long
-        get() = _id?.toLongOrNull() ?: 0L
-
     companion object {
         private val TEXT_PLAIN = arrayOf("text/plain")
         private val MEDIA_PROJECTION = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -144,7 +143,7 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
 
         other as ClipboardItem
 
-        if (_id != other._id) return false
+        if (id != other.id) return false
         if (type != other.type) return false
         if (text != other.text) return false
         if (uri != other.uri) return false
@@ -156,7 +155,7 @@ data class ClipboardItem @OptIn(ExperimentalSerializationApi::class) constructor
     }
 
     override fun hashCode(): Int {
-        var result = _id?.hashCode() ?: 0
+        var result = id?.hashCode() ?: 0
         result = 31 * result + type.hashCode()
         result = 31 * result + (text?.hashCode() ?: 0)
         result = 31 * result + (uri?.hashCode() ?: 0)
