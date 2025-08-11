@@ -177,8 +177,9 @@ class ClipboardManager(
      */
     override fun onPrimaryClipChanged() {
         if (!prefs.clipboard.useInternalClipboard.get() || prefs.clipboard.syncToFloris.get()) {
-            val systemPrimaryClip = systemClipboardManager.primaryClip
             ioScope.launch {
+                delay(100)
+                val systemPrimaryClip = systemClipboardManager.primaryClip
                 val isDuplicate: Boolean
                 primaryClipLastFromCallbackGuard.withLock {
                     val a = primaryClipLastFromCallback?.getItemAt(0)
