@@ -107,7 +107,6 @@ class ClipboardManager(
     private val systemClipboardManager = context.systemService(AndroidClipboardManager::class)
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var cleanUpJob: Job
 
     private val httpClient = HttpClient(Cio) {
         install(ContentNegotiation) {
@@ -133,12 +132,6 @@ class ClipboardManager(
 
     init {
         systemClipboardManager.addPrimaryClipChangedListener(this)
-        cleanUpJob = ioScope.launch {
-            while (isActive) {
-                delay(INTERVAL)
-                enforceExpiryDate(history())
-            }
-        }
     }
 
     fun initializeForContext(context: Context) {
@@ -356,7 +349,6 @@ class ClipboardManager(
      */
     override fun close() {
         systemClipboardManager.removePrimaryClipChangedListener(this)
-        cleanUpJob.cancel()
     }
 
     class ClipboardHistory(val all: List<ClipboardItem>) {

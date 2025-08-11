@@ -129,14 +129,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Clipboard Media File Provider -->
-        <provider
-            android:name="dev.patrickgold.florisboard.ime.clipboard.provider.ClipboardMediaProvider"
-            android:authorities="${applicationId}.provider.clipboard"
-            android:grantUriPermissions="true"
-            android:exported="false">
-        </provider>
-
         <!-- Default file provider to share files from the "files" or "cache" dir -->
         <provider
             android:name="androidx.core.content.FileProvider"
